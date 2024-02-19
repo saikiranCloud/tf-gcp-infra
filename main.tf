@@ -1,34 +1,37 @@
+# Provider configuration for GCP
 provider "google" {
-  credentials = file("./credentials/tf-gcp-infra.json")
-  project     = var.project
-  region      = var.region
+  project = var.project_id
+  region  = var.region
 }
 
-# https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_network#delete_default_routes_on_create
-
+# Resource to create VPC
 resource "google_compute_network" "vpc" {
-  name                    = "vpc"
-  auto_create_subnetworks = false
-  routing_mode            = "REGIONAL"
-  delete_default_routes_on_create = true
+  name                    = var.vpc_name
+  auto_create_subnetworks = var.auto_create_subnetworks
+  routing_mode = var.routing_mode
+  delete_default_routes_on_create = var.delete_default_routes_on_create
 }
 
-resource "google_compute_subnetwork" "webapp" {
-  name          = "webapp"
-  ip_cidr_range = "10.0.6.0/24"
+#Resource to create subnet named webapp
+resource "google_compute_subnetwork" "webapp_subnet" {
+  name          = var.webapp_subnet_name
+  region        = var.region
   network       = google_compute_network.vpc.self_link
+  ip_cidr_range = var.webapp_subnet_cidr
 }
 
-resource "google_compute_subnetwork" "db" {
-  name          = "db"
-  ip_cidr_range = "10.0.7.0/24"
+#Resource to create subnet named db
+resource "google_compute_subnetwork" "db_subnet" {
+  name          = var.db_subnet_name
+  region        = var.region
   network       = google_compute_network.vpc.self_link
+  ip_cidr_range = var.db_subnet_cidr
 }
 
-resource "google_compute_route" "webapp_route" {
-  name                  = "webapp-route"
+# Resource to create route for webapp subnet
+resource "google_compute_route" "vpc_route" {
+  name                  = var.vpc_route_name 
   network               = google_compute_network.vpc.self_link
-  dest_range            = "0.0.0.0/0"
-  next_hop_gateway      = "default-internet-gateway"
-  priority              = 1000
+  dest_range            = var.route_range
+  next_hop_gateway      = var.next_hop_gateway 
 }
