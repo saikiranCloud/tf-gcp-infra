@@ -35,3 +35,31 @@ resource "google_compute_route" "vpc_route" {
   dest_range            = var.route_range
   next_hop_gateway      = var.next_hop_gateway 
 }
+
+# Resource to create firewall rule allowing application traffic
+resource "google_compute_firewall" "allow_app_traffic" {
+  name        = "allow-app-traffic"
+  network     = google_compute_network.vpc.self_link
+
+  allow {
+    protocol = "tcp"
+    ports    = [var.application_port]
+  }
+
+  source_ranges = ["0.0.0.0/0"]  
+  target_tags   = ["webapp"]  
+}
+
+# Resource to create firewall rule denying incoming SSH traffic
+resource "google_compute_firewall" "deny_ssh" {
+  name        = "deny-ssh"
+  network     = google_compute_network.vpc.self_link
+
+  deny {
+    protocol = "tcp"
+    ports    = ["22"] 
+  }
+
+  source_ranges = ["0.0.0.0/0"] 
+  target_tags   = ["webapp"] 
+}

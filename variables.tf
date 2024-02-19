@@ -48,3 +48,7 @@ variable "route_range" {
 variable next_hop_gateway {
   description = "value for next_hop_gateway"
 }
+
+variable application_port {
+  description = "value for next_hop_gateway"
+}
