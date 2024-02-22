@@ -64,7 +64,7 @@ resource "google_compute_firewall" "deny_ssh" {
   target_tags   = ["webapp"]
 }
 
-resource "google_compute_instance" "custom_instance" {
+resource "google_compute_instance" "custom-instance" {
   name         = var.instance_name
   machine_type = var.machine_type
   zone         = var.zone
@@ -75,12 +75,6 @@ resource "google_compute_instance" "custom_instance" {
       image = var.image_name
     }
   }
-  network_interface {
-    network = var.vpc_name
-    subnetwork = var.webapp_subnet_name
-  
-  }
-
   network_interface {
     network = google_compute_network.vpc.self_link
     subnetwork = google_compute_subnetwork.webapp_subnet.self_link  
