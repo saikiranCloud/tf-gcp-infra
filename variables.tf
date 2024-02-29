@@ -80,3 +80,68 @@ variable "priority_allow" {
 variable "priority_deny" {
   description = "value for priority_deny"
 }
+
+
+variable "db-instance-name" {
+  description = "value of db-instance-name"
+}
+variable "db-instance-deletion-protection" {
+  description = "value of db-instance-deletion prtection"
+}
+variable "db-instance-availability" {
+  description = "value of db-instance-availability"
+}
+
+variable "db-instance-region" {
+  description = "value of db-instance--region"
+}
+variable "db-instance-database-version" {
+  description = "value of db-instance-database-version"
+}
+variable "db-instance-disk-type" {
+  description = "value of db-instance-disk-type"
+}
+variable "db-instance-disk-size" {
+  description = "value of db-instance-disk-size"
+}
+variable "db-instance-ipv4-enabled" {
+  description = "value of db-instance-ipv4-enabled"
+}
+variable "google-sql-database-name" {
+  description = "value of google-sql-database-name"
+}
+variable "google-sql-database-user" {
+  description = "value of google-sql-database-user"
+}
+
+variable "global_address" {
+  description = "value of global_address"
+}
+
+variable "global_address_type" {
+  description = "value of global_address_type"
+}
+
+variable "global_address_purpose" {
+  description = "value of global_address_purpose"
+}
+
+variable "global_address_length" {
+  description = "value  of global_address_length"
+  
+}
+
+variable "instance_tier" {
+  description = "value of instance_tier"
+}
+variable "instance_edition" {
+  description = "value of instance_edition"  
+}
+
+variable "instance_enabled" {
+  description = "value"
+}
+
+variable "instance_log_enabled" {
+  description = "value"
+}
