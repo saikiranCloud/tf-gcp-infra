@@ -145,3 +145,23 @@ variable "instance_enabled" {
 variable "instance_log_enabled" {
   description = "value"
 }
+
+variable "sa_acc_id" {
+  description = "value"
+}
+
+variable "sa_display_name" {
+  description = "value"
+}
+variable "dns_name" {
+  description = "value"
+}
+variable "a_record" {
+  description = "value"
+}
+variable "a_record_ttl" {
+  description = "value"
+}
+variable "dns_zone" {
+  description = "value"
+}
