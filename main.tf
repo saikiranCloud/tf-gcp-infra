@@ -68,10 +68,35 @@ resource "google_compute_firewall" "deny_ssh" {
     protocol = "tcp"
     ports = ["22"]
   }
-
   source_ranges = ["0.0.0.0/0"]
   target_tags   = ["webapp"]
 }
+
+
+resource "google_service_account" "vm_service_account" {
+  account_id   = var.sa_acc_id
+  display_name = var.sa_display_name
+}
+
+resource "google_project_iam_binding" "logs_admin_binding" {
+  project = var.project_id
+  role    = "roles/logging.admin"
+  
+  members = [
+    "serviceAccount:${google_service_account.vm_service_account.email}"
+  ]
+}
+
+resource "google_project_iam_binding" "metric_writer_binding" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  
+  members = [
+    "serviceAccount:${google_service_account.vm_service_account.email}"
+  ]
+}
+
+
 resource "google_compute_instance" "custom-instance" {
   project = var.project_id
   name         = var.instance_name
@@ -84,6 +109,14 @@ resource "google_compute_instance" "custom-instance" {
       image = var.image_name
     }
   }
+
+  service_account {
+    email  = google_service_account.vm_service_account.email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/logging.write",
+    "https://www.googleapis.com/auth/logging.admin"]
+  }
+
   # metadata_startup_script = file("startup-script.sh")
   # metadata_startup_script = "${data.template_file.init.rendered}"
   metadata_startup_script = <<-EOT
@@ -103,7 +136,13 @@ EOT
     }
   }
   tags = ["webapp"]
-  depends_on = [ google_sql_database.database, google_sql_database_instance.instance,google_sql_user.user ]
+  depends_on = [ 
+    google_service_account.vm_service_account,
+    google_project_iam_binding.metric_writer_binding,
+    google_project_iam_binding.logs_admin_binding,
+    google_sql_database.database, 
+    google_sql_database_instance.instance,
+    google_sql_user.user ]
 }
 resource "google_compute_global_address" "default" {
   project      = var.project_id
@@ -158,4 +197,18 @@ resource "google_sql_user" "user" {
   name     = var.google-sql-database-user
   instance = google_sql_database_instance.instance.name
   password = random_password.webapp_password.result
+}
+
+# Resource to create Cloud DNS record set pointing to the VM instance
+resource "google_dns_record_set" "webapp_dns_record" {
+  provider = google-beta
+  project  = var.project_id
+  name     = var.dns_name
+  type     = var.a_record
+  ttl      = var.a_record_ttl
+  managed_zone = var.dns_zone
+
+  rrdatas = [
+    google_compute_instance.custom-instance.network_interface.0.access_config.0.nat_ip, 
+  ]
 }
