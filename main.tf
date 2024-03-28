@@ -74,6 +74,7 @@ resource "google_compute_firewall" "deny_ssh" {
 
 
 resource "google_service_account" "vm_service_account" {
+  project = var.project_id
   account_id   = var.sa_acc_id
   display_name = var.sa_display_name
 }
@@ -96,6 +97,14 @@ resource "google_project_iam_binding" "metric_writer_binding" {
   ]
 }
 
+resource "google_project_iam_binding" "vm_pubsub_publisher_binding" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+
+  members = [
+    "serviceAccount:${google_service_account.vm_service_account.email}"
+  ]
+}
 
 resource "google_compute_instance" "custom-instance" {
   project = var.project_id
@@ -125,6 +134,7 @@ echo "DB_PASSWORD=${google_sql_user.user.password}" >> /opt/webapp/.env \
 echo "DB_NAME=${google_sql_database.database.name}" >> /opt/webapp/.env \
 echo "DB_INSTANCE_NAME=${google_sql_database_instance.instance.connection_name}" >> /opt/webapp/.env \
 echo "DB_HOST=\"${google_sql_database_instance.instance.private_ip_address}\"" >> /opt/webapp/.env \
+echo "PROJECT_ID=\"${var.project_id}\"" >> /opt/webapp/.env \
 sleep 20
 sudo systemctl restart webapp
 EOT
@@ -153,7 +163,7 @@ resource "google_compute_global_address" "default" {
   prefix_length = var.global_address_length 
 }
 resource "google_service_networking_connection" "private_vpc_connection" {
-  network               = google_compute_network.vpc.self_link
+  network                = google_compute_network.vpc.self_link
   service                 = "servicenetworking.googleapis.com"														  
   reserved_peering_ranges = [google_compute_global_address.default.name]
 }
@@ -211,4 +221,141 @@ resource "google_dns_record_set" "webapp_dns_record" {
   rrdatas = [
     google_compute_instance.custom-instance.network_interface.0.access_config.0.nat_ip, 
   ]
+}
+
+# Create Pub/Sub topic
+resource "google_pubsub_topic" "verify_email_topic" {
+  project = var.project_id
+  name =  var.topic_name
+  message_retention_duration = var.msg_duration
+}
+
+# Create Service Account for pubsub
+resource "google_service_account" "pubsub_sa" {
+  project = var.project_id
+  account_id   =  var.pubsub_sa_account_id
+  display_name =  var.pubsub_sa_name
+}
+
+# Create IAM binding for the Service Account
+resource "google_project_iam_binding" "pubsub_sa_binding" {
+  project = var.project_id
+  role    = var.pubsub_sa_binding_role
+
+  members = [
+    "serviceAccount:${google_service_account.pubsub_sa.email}",
+  ]
+}
+
+resource "google_service_account" "pubsub_sub_sa" {
+  project = var.project_id
+  account_id   =  var.pubsub_sub_sa_account_id
+  display_name =  var.pubsub_sub_sa_display_name
+}
+
+# Create Pub/Sub subscription for the Cloud Function
+resource "google_pubsub_subscription" "verify_email_subscription" {
+  project = var.project_id
+  name  = var.verify_email_subscription_name
+  topic = google_pubsub_topic.verify_email_topic.name
+  # ack_deadline_seconds = 10
+}
+
+# Create IAM binding for the Service Account
+resource "google_project_iam_binding" "pubsub_sub_sa_binding" {
+  project = var.project_id
+  role    = "roles/pubsub.subscriber"
+
+  members = [
+    "serviceAccount:${google_service_account.pubsub_sub_sa.email}",
+  ]
+}
+
+resource "google_vpc_access_connector" "cloud_function_connector" {
+  project = var.project_id
+  name            =  var.cloud_function_connector_name
+  region          = var.region
+  network         = google_compute_network.vpc.name
+  ip_cidr_range   = var.cloud_function_connector_cidr
+  min_throughput= var.cloud_function_connector_throughput
+}
+
+
+resource "google_service_account" "cloudfunction_sa" {
+  project = var.project_id
+  account_id   =  var.cloudfunction_sa_aid
+  display_name =  var.cloudfunction_sa_dn
+}
+resource "google_cloudfunctions2_function_iam_binding" "binding" {
+  project = var.project_id
+  location = var.region
+  cloud_function = google_cloudfunctions2_function.cloud_function.name
+  role = "roles/cloudfunctions.invoker"
+  members = [
+    "serviceAccount:${google_service_account.cloudfunction_sa.email}",
+  ]
+  depends_on = [ google_cloudfunctions2_function.cloud_function ]
+}
+
+data "archive_file" "serverlesszip" {
+  type = var.datatype
+  source_dir =  var.datasource
+  output_path =   var.dataop
+}
+resource "google_storage_bucket_object" "zip" {
+  source = data.archive_file.serverlesszip.output_path
+  content_type =  var.obj_content_type
+  name = var.bucket_obj_name
+  bucket = google_storage_bucket.sai-bucket.name
+  depends_on = [ google_storage_bucket.sai-bucket, data.archive_file.serverlesszip]
+}
+
+resource "random_id" "bucket_prefix" {
+  byte_length = 8
+}
+
+resource "google_storage_bucket" "sai-bucket" {
+  project = var.project_id
+  name = "${random_id.bucket_prefix.hex}-new-bucket"
+  location = var.region
+}
+
+resource "google_cloudfunctions2_function" "cloud_function" {
+  project = var.project_id
+  name = var.gcf_name
+  location = var.region
+  description = "Cloud function" 
+  build_config {
+    runtime = var.gcf_runtime
+    entry_point = var.gcf_ep
+    source {
+      storage_source {
+        bucket = google_storage_bucket.sai-bucket.name
+        object = google_storage_bucket_object.zip.name
+      }
+    }
+  }
+  event_trigger {
+    event_type = var.trig_event_type
+    trigger_region = var.region
+    pubsub_topic = google_pubsub_topic.verify_email_topic.id
+    retry_policy = var.trig_retry_policy
+  }
+  service_config {
+    max_instance_count = var.sc_instance_count
+    available_memory = var.sc_memory
+    timeout_seconds = var.sc_timeout_seconds
+    service_account_email = google_service_account.cloudfunction_sa.email
+    vpc_connector = google_vpc_access_connector.cloud_function_connector.name
+    environment_variables = {
+      MAILGUN_DOMAIN = var.mg_domain
+      MAILGUN_API_KEY = var.mg_api
+      DB_USER = google_sql_user.user.name
+      DB_PASSWORD = google_sql_user.user.password
+      DB_NAME = google_sql_database.database.name
+      DB_HOST = google_sql_database_instance.instance.private_ip_address
+      PROJECT_ID = var.project_id
+    }
+  } 
+  depends_on = [ data.archive_file.serverlesszip,google_storage_bucket.sai-bucket ]
 }

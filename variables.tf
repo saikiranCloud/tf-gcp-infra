@@ -165,3 +165,110 @@ variable "a_record_ttl" {
 variable "dns_zone" {
   description = "value"
 }
+
+variable "topic_name" {
+  description = "value"
+}
+
+variable "msg_duration" {
+  description = "value"
+}
+
+variable "pubsub_sa_account_id" {
+  description = "value"
+}
+
+variable "pubsub_sa_name" {
+  description = "value"
+}
+variable "pubsub_sa_binding_role" {
+  description = "value"
+}
+variable "pubsub_sub_sa_account_id" {
+  description = "value"
+}
+
+variable "pubsub_sub_sa_display_name" {
+  description = "value"
+}
+variable "verify_email_subscription_name" {
+  description = "value"
+}
+
+variable "cloud_function_connector_name" {
+  description = "value"
+}
+variable "cloud_function_connector_cidr" {
+  description = "value"
+}
+
+variable "cloud_function_connector_throughput" {
+ description = "value" 
+}
+
+variable "cloudfunction_sa_aid" {
+  description = "value"
+  
+}
+variable "cloudfunction_sa_dn" {
+  description = "value"
+}
+
+variable "datatype" {
+  description = "value"
+}
+
+variable "datasource" {
+  description = "value"
+}
+
+variable "dataop" {
+  description = "value"
+}
+
+variable "bucket_obj_name" {
+  description = "value"
+}
+
+variable "obj_content_type" {
+  description = "value"
+}
+
+variable "gcf_name" {
+  description = "value"
+}
+
+variable "gcf_runtime" {
+  description = "value"
+}
+
+variable "gcf_ep" {
+  description = "value"
+}
+
+variable "trig_event_type" {
+  description = "value"
+}
+
+variable "trig_retry_policy" {
+  description = "value"
+}
+
+variable "sc_memory" {
+  description = "value"
+}
+
+variable "sc_instance_count" {
+  description = "value"
+}
+variable "sc_timeout_seconds" {
+  description = "value"
+}
+
+variable "mg_domain" {
+  description = "value"
+}
+
+variable "mg_api" {
+  description = "value"
+}
