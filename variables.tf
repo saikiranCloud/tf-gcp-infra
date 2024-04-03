@@ -272,3 +272,128 @@ variable "mg_domain" {
 variable "mg_api" {
   description = "value"
 }
+
+variable "pass" {
+  default = "DefaultPassword123!"
+}
+
+variable "instance_template_sa_aid" {
+  description = "value"
+}
+variable "instance_template_sa_dn" {
+  description = "value"
+}
+variable "webapp_health_check_sa_aid" {
+  description = "value"
+}
+variable "webapp_health_check_sa_dn" {
+  description = "value" 
+}
+variable "template_name" {
+  description = "value"
+}
+variable "template_dn" {
+  description = "value"
+}
+variable "template_tags" {
+  description = "value"
+}
+variable "template_boot" {
+  description = "value"
+}
+variable "template_lifecycle" {
+  description = "value" 
+}
+variable "health_check_name" {
+  description = "value"
+}
+variable "health_checkinterval" {
+  description = "value"
+}
+variable "health_checktimeout" {
+  description = "value"
+}
+variable "health_check_portname" {
+  description = "value"
+}
+variable "health_check_request_path" {
+  description = "value"
+}
+variable "autoscaler_sa_aid" {
+  description = "value"
+}
+variable "autoscaler_sa_dn" {
+  description = "value"
+}
+variable "autoscaler_name" {
+  description = "value"
+}
+variable "autoscaler_min" {
+  description = "value"
+}
+variable "autoscaler_max" {
+  description = "value"
+}
+variable "autoscaler_cpu" {
+  description = "value"
+}
+variable "igm_name" {
+  description = "value"
+}
+variable "igm_base_name" {
+ description = "value" 
+}
+variable "igm_target_size" {
+  description = "value"
+}
+variable "igm_port_name" {
+  description = "value"
+}
+variable "distribution_policy_zones" {
+  description = "value"
+}
+variable "igm_delay" {
+  description = "value"
+}
+variable "ssl_name" {
+  description = "value"
+}
+variable "ssl_domain" {
+  description = "value" 
+}
+variable "global_forwarding_name" {
+  description = "value"
+}
+variable "global_forwarding_port_range" {
+  description = "value"
+}
+variable "global_forwarding_scheme" {
+  description = "value"
+}
+variable "global_forwarding_ip_protocol" {
+  description = "value"
+}
+variable "https_proxy_name" {
+  description = "value"
+}
+variable "url_map_name" {
+  description = "value"
+}
+variable "lb_backend_name" {
+  description = "value"
+}
+variable "lb_backend_enable_cdn" {
+  description = "value"
+}
+variable "lb_backend_port_name" {
+  description = "value"
+}
+variable "lb_backend_protocol" {
+  description = "value"
+}
+variable "lb_backend_balancing_mode" {
+  description = "value"
+}
+variable "lb_backend_capacity_scaler" {
+  description = "value"
+}
