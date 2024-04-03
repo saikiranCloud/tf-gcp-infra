@@ -42,6 +42,7 @@ resource "google_compute_route" "vpc_route" {
   next_hop_gateway = var.next_hop_gateway
 }
 
+# Create firewall rule to allow traffic only from load balancer's source IP ranges
 # Resource to create firewall rule allowing application traffic
 resource "google_compute_firewall" "allow_app_traffic" {
   project = var.project_id
@@ -52,8 +53,22 @@ resource "google_compute_firewall" "allow_app_traffic" {
     protocol = "tcp"
     ports    = [var.application_port]
   }
-  
-  source_ranges = ["0.0.0.0/0"]
+  depends_on = [ google_compute_global_forwarding_rule.lb_forwarding_rule ]
+  source_ranges = [google_compute_global_forwarding_rule.lb_forwarding_rule.ip_address]
+  target_tags   = ["webapp"]
+}
+
+resource "google_compute_firewall" "allow_health_traffic" {
+  project = var.project_id
+  name    = "allow-health-traffic"
+  network = google_compute_network.vpc.self_link
+  priority    = var.priority_allow
+  allow {
+    protocol = "tcp"
+    ports    = [var.application_port]
+  }
+  depends_on = [ google_compute_global_forwarding_rule.lb_forwarding_rule ]
+  source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
   target_tags   = ["webapp"]
 }
 
@@ -106,54 +121,54 @@ resource "google_project_iam_binding" "vm_pubsub_publisher_binding" {
   ]
 }
 
-resource "google_compute_instance" "custom-instance" {
-  project = var.project_id
-  name         = var.instance_name
-  machine_type = var.machine_type
-  zone         = var.zone
-  boot_disk {
-    initialize_params {
-      type  = var.type
-      size  = var.size
-      image = var.image_name
-    }
-  }
+# resource "google_compute_instance" "custom-instance" {
+#   project = var.project_id
+#   name         = var.instance_name
+#   machine_type = var.machine_type
+#   zone         = var.zone
+#   boot_disk {
+#     initialize_params {
+#       type  = var.type
+#       size  = var.size
+#       image = var.image_name
+#     }
+#   }
 
-  service_account {
-    email  = google_service_account.vm_service_account.email
-    scopes = ["https://www.googleapis.com/auth/cloud-platform",
-    "https://www.googleapis.com/auth/logging.write",
-    "https://www.googleapis.com/auth/logging.admin"]
-  }
+#   service_account {
+#     email  = google_service_account.vm_service_account.email
+#     scopes = ["https://www.googleapis.com/auth/cloud-platform",
+#     "https://www.googleapis.com/auth/logging.write",
+#     "https://www.googleapis.com/auth/logging.admin"]
+#   }
 
-  # metadata_startup_script = file("startup-script.sh")
-  # metadata_startup_script = "${data.template_file.init.rendered}"
-  metadata_startup_script = <<-EOT
-echo "DB_USER=${google_sql_user.user.name}" >> /opt/webapp/.env \
-echo "DB_PASSWORD=${google_sql_user.user.password}" >> /opt/webapp/.env \
-echo "DB_NAME=${google_sql_database.database.name}" >> /opt/webapp/.env \
-echo "DB_INSTANCE_NAME=${google_sql_database_instance.instance.connection_name}" >> /opt/webapp/.env \
-echo "DB_HOST=\"${google_sql_database_instance.instance.private_ip_address}\"" >> /opt/webapp/.env \
-echo "PROJECT_ID=\"${var.project_id}\"" >> /opt/webapp/.env \
-sleep 20
-sudo systemctl restart webapp
-EOT
+#   # metadata_startup_script = file("startup-script.sh")
+#   # metadata_startup_script = "${data.template_file.init.rendered}"
+#   metadata_startup_script = <<-EOT
+# echo "DB_USER=${google_sql_user.user.name}" >> /opt/webapp/.env \
+# echo "DB_PASSWORD=${google_sql_user.user.password}" >> /opt/webapp/.env \
+# echo "DB_NAME=${google_sql_database.database.name}" >> /opt/webapp/.env \
+# echo "DB_INSTANCE_NAME=${google_sql_database_instance.instance.connection_name}" >> /opt/webapp/.env \
+# echo "DB_HOST=\"${google_sql_database_instance.instance.private_ip_address}\"" >> /opt/webapp/.env \
+# echo "PROJECT_ID=\"${var.project_id}\"" >> /opt/webapp/.env \
+# sleep 20
+# sudo systemctl restart webapp
+# EOT
 
-  network_interface {
-    network = google_compute_network.vpc.self_link
-    subnetwork = google_compute_subnetwork.webapp_subnet.self_link  
-    access_config {   
-    }
-  }
-  tags = ["webapp"]
-  depends_on = [ 
-    google_service_account.vm_service_account,
-    google_project_iam_binding.metric_writer_binding,
-    google_project_iam_binding.logs_admin_binding,
-    google_sql_database.database, 
-    google_sql_database_instance.instance,
-    google_sql_user.user ]
-}
+#   network_interface {
+#     network = google_compute_network.vpc.self_link
+#     subnetwork = google_compute_subnetwork.webapp_subnet.self_link  
+#     access_config {   
+#     }
+#   }
+#   tags = ["webapp"]
+#   depends_on = [ 
+#     google_service_account.vm_service_account,
+#     google_project_iam_binding.metric_writer_binding,
+#     google_project_iam_binding.logs_admin_binding,
+#     google_sql_database.database, 
+#     google_sql_database_instance.instance,
+#     google_sql_user.user ]
+# }
 resource "google_compute_global_address" "default" {
   project      = var.project_id
   name         = var.global_address
@@ -199,7 +214,7 @@ resource "google_sql_database" "database" {
 }
 resource "random_password" "webapp_password" {
   length  = 16
-  special = true
+  special = false
 }
 
 resource "google_sql_user" "user" {
@@ -219,7 +234,8 @@ resource "google_dns_record_set" "webapp_dns_record" {
   managed_zone = var.dns_zone
 
   rrdatas = [
-    google_compute_instance.custom-instance.network_interface.0.access_config.0.nat_ip, 
+    google_compute_global_forwarding_rule.lb_forwarding_rule.ip_address,
+    # google_compute_instance.custom-instance.network_interface.0.access_config.0.nat_ip, 
   ]
 }
 
@@ -358,4 +374,168 @@ resource "google_cloudfunctions2_function" "cloud_function" {
     }
   } 
   depends_on = [ data.archive_file.serverlesszip,google_storage_bucket.sai-bucket ]
+}
+
+resource "google_service_account" "instance_template_sa" {
+  project = var.project_id
+  account_id   =  var.instance_template_sa_aid
+  display_name =  var.instance_template_sa_dn
+}
+resource "google_service_account" "webapp_health_check_sa" {
+  project = var.project_id
+  account_id   =  var.webapp_health_check_sa_aid
+  display_name =  var.webapp_health_check_sa_dn
+}
+
+# Create a regional compute instance template
+resource "google_compute_region_instance_template" "webapp_instance_template" {
+  project       = var.project_id
+  region = var.region
+  name          = var.template_name
+  description   = var.template_dn
+  machine_type  = var.machine_type
+  tags          = var.template_tags
+  disk {
+    source_image = var.image_name
+    boot         = var.template_boot
+    disk_size_gb = var.size
+    disk_type = var.type
+  }
+  network_interface {
+    network = google_compute_network.vpc.self_link
+    subnetwork = google_compute_subnetwork.webapp_subnet.self_link
+    access_config {}
+  }
+  lifecycle {
+    create_before_destroy = true
+  }
+  service_account {
+    email  = google_service_account.vm_service_account.email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/logging.write",
+    "https://www.googleapis.com/auth/logging.admin"]
+  }
+  metadata_startup_script = <<-EOT
+echo "DB_USER=${google_sql_user.user.name}" >> /opt/webapp/.env \
+echo "DB_PASSWORD=${google_sql_user.user.password}" >> /opt/webapp/.env \
+echo "DB_NAME=${google_sql_database.database.name}" >> /opt/webapp/.env \
+echo "DB_INSTANCE_NAME=${google_sql_database_instance.instance.connection_name}" >> /opt/webapp/.env \
+echo "DB_HOST=\"${google_sql_database_instance.instance.private_ip_address}\"" >> /opt/webapp/.env \
+echo "PROJECT_ID=\"${var.project_id}\"" >> /opt/webapp/.env \
+EOT
+  depends_on = [ 
+    google_service_account.vm_service_account,
+    google_project_iam_binding.metric_writer_binding,
+    google_project_iam_binding.logs_admin_binding,
+    google_sql_database.database, 
+    google_sql_database_instance.instance,
+    google_sql_user.user ]
+}
+# Create a compute health check
+resource "google_compute_health_check" "webapp_health_check" {
+  project      = var.project_id
+  name         = var.health_check_name
+  check_interval_sec = var.health_checkinterval
+  timeout_sec  = var.health_checktimeout
+  http_health_check {
+    port = var.application_port
+    port_name = var.health_check_portname
+    request_path = var.health_check_request_path
+  }
+  }
+resource "google_service_account" "autoscaler_sa" {
+  project = var.project_id
+  account_id   =  var.autoscaler_sa_aid
+  display_name =  var.autoscaler_sa_dn
+}
+resource "google_compute_region_autoscaler" "webapp_autoscaler" {
+  project         = var.project_id
+  region = var.region
+  name            = var.autoscaler_name
+  target          = google_compute_region_instance_group_manager.webapp_group_manager.self_link
+  autoscaling_policy {
+    min_replicas = var.autoscaler_min
+    max_replicas = var.autoscaler_max
+    cpu_utilization {
+      target = var.autoscaler_cpu
+    }
+  }
+  depends_on = [ google_compute_region_instance_group_manager.webapp_group_manager ]
+}
+
+# Create a regional compute instance group manager
+resource "google_compute_region_instance_group_manager" "webapp_group_manager" {
+  version {
+    instance_template   = google_compute_region_instance_template.webapp_instance_template.self_link
+  }
+  project             = var.project_id
+  region              = var.region
+  name                = var.igm_name
+  base_instance_name  = var.igm_base_name
+  target_size         = var.igm_target_size
+  named_port {
+    name = var.igm_port_name
+    port = var.application_port
+  }
+  distribution_policy_zones = var.distribution_policy_zones
+  auto_healing_policies {
+    initial_delay_sec = var.igm_delay
+    health_check = google_compute_health_check.webapp_health_check.self_link
+  }
+  # target_pools = [google_compute_target_pool.webapp_target_pool.self_link]
+}
+# Retrieve the source IP ranges of the load balancer
+data "google_compute_global_forwarding_rule" "lb_forwarding_rule" {
+  project = var.project_id
+  name = google_compute_global_forwarding_rule.lb_forwarding_rule.name
+}
+# Create a Google-managed SSL certificate
+resource "google_compute_managed_ssl_certificate" "lb_default" {
+  provider = google-beta
+  name     = var.ssl_name
+  managed {
+    domains = var.ssl_domain
+  }
+}
+
+# Create an external HTTP(S) load balancer
+resource "google_compute_global_forwarding_rule" "lb_forwarding_rule" {
+  name       = var.global_forwarding_name
+  project    = var.project_id
+  target     = google_compute_target_https_proxy.lb_target_proxy.self_link
+  port_range = var.global_forwarding_port_range
+  load_balancing_scheme = var.global_forwarding_scheme
+  # ip_address = 
+  ip_protocol = var.global_forwarding_ip_protocol
+}
+
+# Create a target HTTPS proxy
+resource "google_compute_target_https_proxy" "lb_target_proxy" {
+  name        = var.https_proxy_name
+  project     = var.project_id
+  url_map     = google_compute_url_map.lb_url_map.self_link
+  ssl_certificates = [google_compute_managed_ssl_certificate.lb_default.self_link]
+  depends_on = [ google_compute_managed_ssl_certificate.lb_default ]
+}
+
+# Create a URL map
+resource "google_compute_url_map" "lb_url_map" {
+  name    = var.url_map_name
+  project = var.project_id
+  default_service = google_compute_backend_service.lb_backend_service.self_link
+}
+
+# Create a backend service
+resource "google_compute_backend_service" "lb_backend_service" {
+  name           = var.lb_backend_name
+  project        = var.project_id
+  health_checks = [google_compute_health_check.webapp_health_check.self_link]
+  enable_cdn     = var.lb_backend_enable_cdn
+  port_name      = var.lb_backend_port_name
+  protocol = var.lb_backend_protocol
+  backend {
+    group           = google_compute_region_instance_group_manager.webapp_group_manager.instance_group
+    balancing_mode  = var.lb_backend_balancing_mode
+    capacity_scaler = var.lb_backend_capacity_scaler
+  }
 }
