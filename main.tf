@@ -79,7 +79,7 @@ resource "google_compute_firewall" "deny_ssh" {
   network = google_compute_network.vpc.self_link
   priority    = var.priority_deny
 
-  deny {
+  allow {
     protocol = "tcp"
     ports = ["22"]
   }
@@ -189,7 +189,8 @@ resource "google_sql_database_instance" "instance" {
   deletion_protection = var.db-instance-deletion-protection
   database_version    = var.db-instance-database-version
   project             = var.project_id
-  depends_on = [google_service_networking_connection.private_vpc_connection]									  																					   
+  depends_on = [google_service_networking_connection.private_vpc_connection]
+  encryption_key_name = google_kms_crypto_key.sql_key.id									  																					   
   settings {
     tier              = var.instance_tier  
     edition             = var.instance_edition  
@@ -334,6 +335,10 @@ resource "google_storage_bucket" "sai-bucket" {
   project = var.project_id
   name = "${random_id.bucket_prefix.hex}-new-bucket"
   location = var.region
+  depends_on = [ google_kms_crypto_key_iam_binding.project ]
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.store_key.id
+  }
 }
 
 resource "google_cloudfunctions2_function" "cloud_function" {
@@ -373,7 +378,7 @@ resource "google_cloudfunctions2_function" "cloud_function" {
       PROJECT_ID = var.project_id
     }
   } 
-  depends_on = [ data.archive_file.serverlesszip,google_storage_bucket.sai-bucket ]
+  depends_on = [ data.archive_file.serverlesszip,google_storage_bucket.sai-bucket,google_vpc_access_connector.cloud_function_connector ]
 }
 
 resource "google_service_account" "instance_template_sa" {
@@ -400,6 +405,9 @@ resource "google_compute_region_instance_template" "webapp_instance_template" {
     boot         = var.template_boot
     disk_size_gb = var.size
     disk_type = var.type
+    source_image_encryption_key {
+      kms_key_self_link = google_kms_crypto_key.vm_key.id
+    }
   }
   network_interface {
     network = google_compute_network.vpc.self_link
@@ -538,4 +546,68 @@ resource "google_compute_backend_service" "lb_backend_service" {
     balancing_mode  = var.lb_backend_balancing_mode
     capacity_scaler = var.lb_backend_capacity_scaler
   }
+}
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+locals {
+    cloud_storage_service_account = "service-${data.google_project.current.number}@gs-project-accounts.iam.gserviceaccount.com"
+}
+
+resource "google_project_service_identity" "gcp_sa_cloud_sql" {
+  provider = google-beta
+  service  = var.sqlapis
+}
+
+resource "google_kms_key_ring" "key_ring" {
+  provider = google-beta
+  project =  var.project_id
+  name     = var.keyring_name
+  location = var.region
+}
+resource "google_kms_crypto_key" "vm_key" {
+  name      = var.vmkey_name
+  key_ring  = google_kms_key_ring.key_ring.id
+  purpose   = var.purpose
+  rotation_period = var.key_rotation_period
+}
+resource "google_kms_crypto_key" "sql_key" {
+  name      = var.sqlkey_name
+  key_ring  = google_kms_key_ring.key_ring.id
+  purpose   = var.purpose
+  rotation_period = var.key_rotation_period
+}
+resource "google_kms_crypto_key" "store_key" {
+  name      = var.storekey_name
+  key_ring  = google_kms_key_ring.key_ring.id
+  purpose   = var.purpose
+  rotation_period = var.key_rotation_period
+}
+
+resource "google_kms_crypto_key_iam_binding" "crypto_key" {
+  provider      = google-beta
+  crypto_key_id = google_kms_crypto_key.sql_key.id
+  role          = var.kms_role
+  members = [
+    "serviceAccount:${google_project_service_identity.gcp_sa_cloud_sql.email}",
+  ]
+}
+
+resource "google_kms_crypto_key_iam_binding" "crypto_vm_key" {
+  provider      = google-beta
+  crypto_key_id = google_kms_crypto_key.vm_key.id
+  role          = var.kms_role  
+  members = [
+  "serviceAccount:${data.google_project.current.number}@cloudservices.gserviceaccount.com",
+  "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com", 
+  "serviceAccount:service-${data.google_project.current.number}@compute-system.iam.gserviceaccount.com"]
+}
+resource "google_kms_crypto_key_iam_binding" "project" {
+  provider = google-beta
+  crypto_key_id = google_kms_crypto_key.store_key.id
+  role    = var.kms_role
+  members = [
+    "serviceAccount:service-${data.google_project.current.number}@gs-project-accounts.iam.gserviceaccount.com"
+  ]
 }
