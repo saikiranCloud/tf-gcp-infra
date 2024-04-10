@@ -79,7 +79,7 @@ resource "google_compute_firewall" "deny_ssh" {
   network = google_compute_network.vpc.self_link
   priority    = var.priority_deny
 
-  allow {
+  deny {
     protocol = "tcp"
     ports = ["22"]
   }
