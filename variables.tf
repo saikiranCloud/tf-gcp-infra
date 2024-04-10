@@ -397,3 +397,27 @@ variable "lb_backend_balancing_mode" {
 variable "lb_backend_capacity_scaler" {
   description = "value"
 }
+variable "keyring_name" {
+  description = "value"
+}
+variable "vmkey_name" {
+ description = "value" 
+}
+variable "sqlkey_name" {
+  description = "value"
+}
+variable "storekey_name" {
+  description = "value"
+}
+variable "purpose" {
+  description = "value"
+}
+variable "key_rotation_period" {
+  description = "value"
+}
+variable "kms_role" {
+  description = "value"
+}
+variable "sqlapis" {
+  description = "value"
+}
